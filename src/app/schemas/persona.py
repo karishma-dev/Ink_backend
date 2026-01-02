@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List
 
 class CreatePersonaRequest(BaseModel):
@@ -16,7 +16,7 @@ class CreatePersonaRequest(BaseModel):
     purpose: str = "blog"
 
 class PersonaResponse(BaseModel):
-    id: int
+    id: str
     name: str
     description: str
     samples: List[str]

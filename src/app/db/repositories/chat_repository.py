@@ -1,5 +1,6 @@
 from typing import Optional
 from app.db.models import Chat, Message
+from sqlalchemy import func, select
 
 class ChatRepository:
     def __init__(self, db_session):
@@ -20,3 +21,44 @@ class ChatRepository:
         self.db.commit()
 
         return chat.id
+    
+    def get_chat_history(self, user_id: int, limit: int = 20, offset: int = 0):
+        """Get all chats for a user"""
+        query = select(
+            Chat.id,
+            Chat.title,
+            Chat.created_at,
+            func.max(Message.content).label('last_message')
+        ).outerjoin(
+            Message, Chat.id == Message.chat_id
+        ).filter(
+            Chat.user_id == user_id
+        ).group_by(
+            Chat.id, Chat.title, Chat.created_at
+        ).order_by(
+            Chat.created_at.desc()
+        ).limit(limit).offset(offset)
+
+        chats = self.db.execute(query).all()
+
+        return {
+            "chats": [dict(row) for row in chats],
+            "total": self.db.query(Chat).filter(Chat.user_id == user_id).count()
+        }
+
+    def get_chat_messages(self, user_id: int, chat_id: int, limit: int = 20, offset: int = 0):
+        """Get full chat with all messages, ensuring user owns it"""
+        chat_query = self.db.query(Chat).filter(Chat.user_id == user_id, Chat.id == chat_id).first()
+        if not chat_query:
+            return None
+        
+        query = self.db.query(Message).filter(Message.chat_id == chat_id)
+        messages = query.order_by(Message.created_at.asc()).offset(offset).limit(limit).all() 
+
+        return {
+            "messages": messages,
+            "chat_id": chat_query.id,
+            "title": chat_query.title,
+            "created_at": chat_query.created_at,
+            "total": query.count()
+        }

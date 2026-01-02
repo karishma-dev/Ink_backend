@@ -8,10 +8,10 @@ services:
       POSTGRES_PASSWORD: password
       POSTGRES_DB: write_cursor_dev
     volumes:
-      - ./backend/docker/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+      - ./docker/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
       - pgdata:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "5433:5432"
 
   qdrant:
     image: qdrant/qdrant:latest
@@ -34,6 +34,18 @@ services:
     ports:
       - 8080:8080
 
+  neo4j:
+    image: neo4j:latest
+    environment:
+      NEO4J_AUTH: neo4j/password
+      NEO4J_ACCEPT_LICENSE_AGREEMENT: "yes"
+    ports:
+      - "7687:7687"
+      - "7474:7474"
+    volumes:
+      - neo4j_data:/var/lib/neo4j/data
+
 volumes:
   pgdata:
   qdrant_storage:
+  neo4j_data:
