@@ -172,3 +172,30 @@ class PersonaRepository:
         if "id" in data and data["id"] is not None:
             data["id"] = str(data["id"])
         return data
+    
+    def get_personas_by_topic(self,topic: str, limit: int = 5):
+        """Get personas by topic"""
+        query = """
+        MATCH (p:Persona)-[:targets_topic]->(t:Topic {name: $topic})
+        OPTIONAL MATCH (p)-[:targets_topic]->(t2:Topic)
+        OPTIONAL MATCH (p)-[:bans_word]->(bw:BannedWord)
+        OPTIONAL MATCH (p)-[:targets_audience]->(a:Audience)
+        OPTIONAL MATCH (p)-[:for_purpose]->(pur:Purpose)
+        RETURN p, collect(DISTINCT t2.name) as topics,
+               collect(DISTINCT bw.text) as banned_words,
+               a.type as audience, pur.type as purpose
+        LIMIT $limit
+        """
+
+        result = self.session.run(query, {"topic": topic, "limit": limit})
+        personas = []
+
+        for record in result:
+            persona = self._persona_to_dict(record["p"])
+            persona["topics"] = record["topics"] or []
+            persona["banned_words"] = record["banned_words"] or []
+            persona["audience"] = record["audience"] or ""
+            persona["purpose"] = record["purpose"] or ""
+            personas.append(persona)
+
+        return personas

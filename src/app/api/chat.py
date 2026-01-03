@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.security import get_current_user
 from app.core.neo4j_dependency import get_neo4j_db
 from neo4j import Session as Neo4jSession
+from app.services.tools_service import ToolsService
 
 
 chat_router = APIRouter()
@@ -21,10 +22,10 @@ async def chat_endpoint(
     neo4j_db: Neo4jSession = Depends(get_neo4j_db),
     user_id: int = Depends(get_current_user)
 ):
-    gemini_service = GeminiService()
+    tools_service = ToolsService(neo4j_db)
+    gemini_service = GeminiService(tools_service=tools_service)
     try:
         neo4j_repo = PersonaRepository(neo4j_db)
-
         persona = None
         system_prompt = None
         

@@ -62,3 +62,11 @@ class ChatRepository:
             "created_at": chat_query.created_at,
             "total": query.count()
         }
+    
+    def delete_chat_by_id(self, id: int):
+        chat = self.db.query(Chat).filter(Chat.id == id).first()
+        if chat:
+            self.db.delete(chat)
+            self.db.commit()
+            return True
+        return False

@@ -1,14 +1,14 @@
 Features in cursor for writing:
 
-- Chatbot, normal Q/A
+- Chatbot, normal Q/A -> DONE
 - Autosuggestion
 - Upload document
 - SSE
-- Chat history
-- User authentication
+- Chat history -> DONE
+- User authentication -> DONE
 - Rate limiting
 - Save documents
-- Create a persona for the user, so the writing style will be same
+- Create a persona for the user, so the writing style will be same -> DONE
 - Later on: Multiple persona selection
 
 ---
