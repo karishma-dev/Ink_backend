@@ -1,3 +1,4 @@
+import json
 from fastapi import APIRouter, Depends, HTTPException
 from app.schemas.chat import ChatRequest, ChatResponse, ChatHistoryResponse, ChatListResponse
 from app.services.gemini_service import GeminiService
@@ -12,6 +13,7 @@ from app.core.neo4j_dependency import get_neo4j_db
 from neo4j import Session as Neo4jSession
 from app.services.tools_service import ToolsService
 from app.services.rag_service import RAGService
+from fastapi.responses import StreamingResponse
 
 chat_router = APIRouter()
 
@@ -22,62 +24,65 @@ async def chat_endpoint(
     neo4j_db: Neo4jSession = Depends(get_neo4j_db),
     user_id: int = Depends(get_current_user)
 ):
-    tools_service = ToolsService(neo4j_db)
-    gemini_service = GeminiService(tools_service=tools_service)
-    try:
-        neo4j_repo = PersonaRepository(neo4j_db)
-        persona = None
-        system_prompt = None
-        
-        if request.persona_id:
-            persona = neo4j_repo.get_persona(request.persona_id)
+    def generate():
+        try:
+            yield f"data: {json.dumps({'type': 'status', 'content': 'Thinking...'})}\n\n"
+
+            # Get persona
+            neo4j_repo = PersonaRepository(neo4j_db)
+            persona = None
+
+            if request.persona_id:
+                persona = neo4j_repo.get_persona(request.persona_id)
             
-        document_context = ""
-        citations = []
+            # Get document context
+            document_context = ""
+            citations = []
+            
+            if request.document_ids:
+                yield f"data: {json.dumps({'type': 'status', 'content': 'Searching documents...'})}\n\n"
 
-        if request.document_ids:
-            rag_service = RAGService()
+                rag_service = RAGService()
 
-            rag_result = rag_service.get_relevant_context(
-                query=request.message,
-                document_ids=request.document_ids
+                rag_result = rag_service.get_relevant_context(
+                    query=request.message,
+                    document_ids=request.document_ids
+                )
+                document_context = rag_result["context"]
+                citations = rag_result["citations"]
+
+            system_prompt = PromptBuilder.build_full_prompt(
+                persona=persona,
+                document_context=document_context
             )
-            document_context = rag_result["context"]
-            citations = rag_result["citations"]
 
-        system_prompt = PromptBuilder.build_full_prompt(
-            persona=persona,
-            document_context=document_context
-        )
+            yield f"data: {json.dumps({'type': 'status', 'content': 'Generating...'})}\n\n"
 
-        if request.test_mode:
-            # Test mode: return system prompt without calling Gemini
-            return ChatResponse(
-                response=f"[TEST MODE] Would send to Gemini: {request.message}",
-                status="test",
+            # Stream with tools
+            tools_service = ToolsService(neo4j_db)
+            gemini_service = GeminiService(tools_service=tools_service)
+            full_response = ""
+            
+            for event in gemini_service.chat(request.message, system_prompt):
+                if event["type"] == "content":
+                    full_response += event["content"]
+                yield f"data: {json.dumps(event)}\n\n"
+            
+            # Save to DB
+            repo = ChatRepository(db)
+            chat_id = repo.save_message(
+                user_id=user_id,
                 chat_id=request.chat_id,
-                system_prompt=system_prompt
+                user_message=request.message,
+                ai_response=full_response
             )
-        
-        response_text = gemini_service.chat(request.message, system_prompt)
+            
+            yield f"data: {json.dumps({'type': 'done', 'chat_id': chat_id, 'citations': citations})}\n\n"
 
-        repo = ChatRepository(db)
+        except ClientError as e:
+            yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
 
-        chat_id = repo.save_message(
-            user_id=user_id,
-            chat_id=request.chat_id,
-            user_message=request.message,
-            ai_response=response_text
-        )
-        
-        return ChatResponse(
-            response=response_text, 
-            status="success", 
-            chat_id=chat_id,
-            citations=citations
-        )
-    except ClientError as e:
-        return ChatResponse(response=str(e), status="error")
+    return StreamingResponse(generate(), media_type="text/event-stream")
     
 @chat_router.get("/chats", response_model=ChatListResponse)
 async def list_user_chats(
