@@ -23,16 +23,25 @@ services:
     volumes:
       - qdrant_storage:/qdrant/storage
 
-  redis:
-    image: redis:7
+  # redis:
+  #   image: redis:7
+  #   ports:
+  #     - "6379:6379"
+
+  rabbitmq:
+    image: rabbitmq:3-management
     ports:
-      - "6379:6379"
+      - "5672:5672" # AMQP port (for Celery)
+      - "15672:15672" # Management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
 
   adminer:
     image: adminer
     restart: always
     ports:
-      - 8080:8080
+      - 8080:8080 # Go to http://localhost:8080 for lightweight DB management UI
 
   neo4j:
     image: neo4j:latest

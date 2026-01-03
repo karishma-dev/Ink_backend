@@ -7,12 +7,20 @@ class ChatRequest(BaseModel):
     chat_id: Optional[int] = None
     persona_id: Optional[str] = None
     test_mode: Optional[bool] = False
+    document_ids: Optional[list[int]] = None
 
+class Citation(BaseModel):
+    index: int
+    document_id: int
+    chunk_text: str
+    score: float
+    
 class ChatResponse(BaseModel):
     response: str
     status: str
     chat_id: Optional[int] = None
     system_prompt: Optional[str] = None
+    citations: Optional[list[Citation]] = None
 
 class ChatListItem(BaseModel):
     id: int

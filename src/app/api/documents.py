@@ -5,6 +5,7 @@ from app.db.database import get_db
 from app.core.security import get_current_user
 from app.core.exceptions import ValidationException, NotFound
 from app.schemas.documents import DocumentResponse, DocumentListResponse, DocumentUploadResponse
+from app.workers.document_tasks import process_document
 from pathlib import Path
 import os
 
@@ -58,6 +59,8 @@ async def upload(
         file_size=file_size
     )
     
+
+    process_document.delay(document.id)
     return DocumentUploadResponse.from_orm(document)
 
 @documents_router.get("/", response_model=DocumentListResponse)

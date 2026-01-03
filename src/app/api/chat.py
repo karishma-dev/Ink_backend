@@ -11,7 +11,7 @@ from app.core.security import get_current_user
 from app.core.neo4j_dependency import get_neo4j_db
 from neo4j import Session as Neo4jSession
 from app.services.tools_service import ToolsService
-
+from app.services.rag_service import RAGService
 
 chat_router = APIRouter()
 
@@ -31,12 +31,25 @@ async def chat_endpoint(
         
         if request.persona_id:
             persona = neo4j_repo.get_persona(request.persona_id)
-            if persona:
-                system_prompt = PromptBuilder.build_persona_prompt(persona)
-                print(f"DEBUG: Using persona '{persona['name']}' with prompt length: {len(system_prompt)}")
-            else:
-                print(f"DEBUG: Persona {request.persona_id} not found")
-        
+            
+        document_context = ""
+        citations = []
+
+        if request.document_ids:
+            rag_service = RAGService()
+
+            rag_result = rag_service.get_relevant_context(
+                query=request.message,
+                document_ids=request.document_ids
+            )
+            document_context = rag_result["context"]
+            citations = rag_result["citations"]
+
+        system_prompt = PromptBuilder.build_full_prompt(
+            persona=persona,
+            document_context=document_context
+        )
+
         if request.test_mode:
             # Test mode: return system prompt without calling Gemini
             return ChatResponse(
@@ -56,7 +69,13 @@ async def chat_endpoint(
             user_message=request.message,
             ai_response=response_text
         )
-        return ChatResponse(response=response_text, status="success", chat_id=chat_id)
+        
+        return ChatResponse(
+            response=response_text, 
+            status="success", 
+            chat_id=chat_id,
+            citations=citations
+        )
     except ClientError as e:
         return ChatResponse(response=str(e), status="error")
     
