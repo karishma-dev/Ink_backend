@@ -49,8 +49,8 @@ async def chat_endpoint(
             citations = []
             active_chat_id = None
 
-            # If draft_content is present, user is in editor - AI decides to edit or answer
-            if chat_data.draft_content:
+            # If draft_content is present (even if empty), user is in editor - AI decides to edit or answer
+            if chat_data.draft_content is not None:
                 yield f"data: {json.dumps({'type': 'status', 'content': 'Analyzing...'})}\n\n"
                 
                 edit_service = EditService()
