@@ -37,7 +37,29 @@ class EditService:
         Returns:
             Dict with 'explanation' (str) and 'edits' (list)
         """
-        
+        # Mock mode for cost-effective testing
+        if instruction.lower() == "test mock":
+            return {
+                "response_type": "edit",
+                "explanation": "This is a mock response for testing. It includes two edits to verify index shifting.",
+                "edits": [
+                    {
+                        "type": "replace",
+                        "start": 0,
+                        "end": 5,
+                        "original": document_content[:5] if len(document_content) >= 5 else "",
+                        "replacement": "FRESH"
+                    },
+                    {
+                        "type": "replace",
+                        "start": 10,
+                        "end": 15,
+                        "original": document_content[10:15] if len(document_content) >= 15 else "",
+                        "replacement": "STICKY"
+                    }
+                ]
+            }
+
         # Use PromptBuilder for consistent prompts
         prompt = PromptBuilder.build_edit_prompt(
             document_content=document_content,
@@ -46,9 +68,9 @@ class EditService:
             persona=persona
         )
         
-        config = genai.GenerateContentConfig(
-            temperature=0.3,  # Lower temperature for precise edits
-        )
+        config = {
+            "temperature": 0.3,  # Lower temperature for precise edits
+        }
         
         response = self.client.models.generate_content(
             model="gemini-2.0-flash",

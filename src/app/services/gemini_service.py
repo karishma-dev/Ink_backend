@@ -12,10 +12,10 @@ class GeminiService:
         """Stream chat response with tool call support"""
         tools = self.get_tools() if self.tools_service else None
 
-        config = genai.GenerateContentConfig(
-            system_instruction=system_prompt,
-            tools=tools
-        )
+        config = {
+            "system_instruction": system_prompt,
+            "tools": tools
+        }
         
         response = self.client.models.generate_content_stream(
             model="gemini-2.0-flash",

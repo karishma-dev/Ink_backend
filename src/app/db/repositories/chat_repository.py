@@ -10,39 +10,61 @@ class ChatRepository:
         if chat_id:
             chat = self.db.query(Chat).filter(Chat.id == chat_id).first()
         else:
-            chat = Chat(user_id=user_id, title="New Chat")
+            # Generate a title from the first 50 chars of the user message
+            title = user_message[:50] + ("..." if len(user_message) > 50 else "")
+            chat = Chat(user_id=user_id, title=title)
             self.db.add(chat)
-            self.db.commit()
+            self.db.flush() # Get chat.id before committing
 
         user_msg = Message(content=user_message, role='user', chat_id=chat.id)
-        ai_msg = Message(content=ai_response, role='assistant', chat_id=chat.id)
+        self.db.add(user_msg)
+        self.db.flush() # Ensure user message has an earlier ID/timestamp
 
-        self.db.add_all([user_msg, ai_msg])
+        ai_msg = Message(content=ai_response, role='assistant', chat_id=chat.id)
+        self.db.add(ai_msg)
+        
         self.db.commit()
 
         return chat.id
     
     def get_chat_history(self, user_id: int, limit: int = 20, offset: int = 0):
-        """Get all chats for a user"""
-        query = select(
-            Chat.id,
-            Chat.title,
-            Chat.created_at,
-            func.max(Message.content).label('last_message')
-        ).outerjoin(
-            Message, Chat.id == Message.chat_id
-        ).filter(
-            Chat.user_id == user_id
-        ).group_by(
-            Chat.id, Chat.title, Chat.created_at
-        ).order_by(
-            Chat.created_at.desc()
-        ).limit(limit).offset(offset)
+        """Get all chats for a user with the real last message"""
+        # Subquery to get the latest message ID for each chat
+        latest_msg_id_subquery = (
+            select(func.max(Message.id))
+            .group_by(Message.chat_id)
+            .scalar_subquery()
+        )
+
+        query = (
+            select(
+                Chat.id,
+                Chat.title,
+                Chat.created_at,
+                Chat.updated_at if hasattr(Chat, 'updated_at') else Chat.created_at,
+                Message.content.label('last_message')
+            )
+            .join(Message, Chat.id == Message.chat_id)
+            .filter(
+                Chat.user_id == user_id,
+                Message.id.in_(latest_msg_id_subquery)
+            )
+            .order_by(Chat.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
 
         chats = self.db.execute(query).all()
 
         return {
-            "chats": [dict(row) for row in chats],
+            "chats": [
+                {
+                    "id": row.id,
+                    "title": row.title,
+                    "created_at": row.created_at,
+                    "last_message": row.last_message
+                } for row in chats
+            ],
             "total": self.db.query(Chat).filter(Chat.user_id == user_id).count()
         }
 
@@ -53,7 +75,7 @@ class ChatRepository:
             return None
         
         query = self.db.query(Message).filter(Message.chat_id == chat_id)
-        messages = query.order_by(Message.created_at.asc()).offset(offset).limit(limit).all() 
+        messages = query.order_by(Message.id.asc()).offset(offset).limit(limit).all() 
 
         return {
             "messages": messages,
