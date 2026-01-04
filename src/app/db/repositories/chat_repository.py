@@ -75,7 +75,7 @@ class ChatRepository:
             return None
         
         query = self.db.query(Message).filter(Message.chat_id == chat_id)
-        messages = query.order_by(Message.id.asc()).offset(offset).limit(limit).all() 
+        messages = query.order_by(Message.created_at.asc()).offset(offset).limit(limit).all() 
 
         return {
             "messages": messages,
@@ -92,3 +92,13 @@ class ChatRepository:
             self.db.commit()
             return True
         return False
+
+    def get_recent_messages(self, chat_id: int, limit: int = 10) -> list:
+        """
+        Fetch the last N messages from a chat, ordered oldest first.
+        Returns: [{"role": "user", "content": "..."}, {"role":"assistant", "content": "..."}]
+        """
+        messages = self.db.query(Message).filter(Message.chat_id == chat_id).order_by(Message.created_at.desc()).limit(limit).all()
+        messages = messages[::-1]
+
+        return [{"role":  "model" if msg.role == "assistant" else "user", "parts": [{ "text" : msg.content}]} for msg in messages]

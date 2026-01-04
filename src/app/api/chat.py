@@ -34,6 +34,7 @@ async def chat_endpoint(
             # Get persona (use explicitly provided or fall back to active persona)
             neo4j_repo = PersonaRepository(neo4j_db)
             user_repo = UserRepository(db, None)
+            repo = ChatRepository(db)
             persona = None
 
             # Priority: 1. Explicit persona_id, 2. User's active persona
@@ -113,13 +114,16 @@ async def chat_endpoint(
                 tools_service = ToolsService(neo4j_db)
                 gemini_service = GeminiService(tools_service=tools_service)
                 
-                for event in gemini_service.chat(chat_data.message, system_prompt):
+                history = []
+                if chat_data.chat_id:
+                    history = repo.get_recent_messages(chat_data.chat_id, limit=10)
+
+                for event in gemini_service.chat(chat_data.message, system_prompt, history=history):
                     if event["type"] == "content":
                         full_response += event["content"]
                     yield f"data: {json.dumps(event)}\n\n"
             
             # Save to DB (for both edit and ask modes)
-            repo = ChatRepository(db)
             chat_id = repo.save_message(
                 user_id=user_id,
                 chat_id=chat_data.chat_id or active_chat_id,

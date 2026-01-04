@@ -122,14 +122,19 @@ Focus your edits on this selection.
         
         autocomplete_instructions = """
 ## Autocomplete Mode:
-Complete the user's text naturally with approximately 1 sentence (10-30 words).
+Provide ONLY the completion text - the words that come AFTER the user's text.
 
-Rules:
-- Continue the text seamlessly and naturally
-- Do NOT repeat any text that's already written
-- Match the tone and style of the existing text
-- Keep it concise and relevant
-- Return ONLY the completion, nothing else (no quotes, no explanations)
+CRITICAL RULES:
+- Output ONLY new words that continue the text
+- NEVER repeat ANY part of the existing text
+- Start your response immediately with the next word
+- Keep it to 1 sentence (10-30 words)
+- No quotes, no explanations, just the completion
+
+Example:
+User's text: "I am writing to inform you that"
+CORRECT output: "the project has been completed ahead of schedule."
+WRONG output: "I am writing to inform you that the project has been completed."
 """
         
         persona_context = ""
@@ -145,7 +150,7 @@ Rules:
         return f"""{base}
 {autocomplete_instructions}
 {persona_context}
-## Continue this text:
+## Complete this text (provide ONLY the next words):
 {context}"""
     
     @staticmethod

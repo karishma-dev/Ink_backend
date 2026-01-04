@@ -1,4 +1,5 @@
 from app.db.models import Draft
+from datetime import datetime
 
 class DraftRepository:
     def __init__(self, db_session):
@@ -43,6 +44,9 @@ class DraftRepository:
             draft.content = content
         if status is not None:
             draft.status = status
+        
+        # Explicitly update the timestamp
+        draft.updated_at = datetime.utcnow()
         
         self.db.commit()
         self.db.refresh(draft)

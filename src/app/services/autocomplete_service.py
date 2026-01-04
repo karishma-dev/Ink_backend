@@ -5,6 +5,7 @@ Provides intelligent text completion suggestions using Gemini.
 Supports persona-aware completions for consistent writing style.
 """
 import google.genai as genai
+from google.genai import types
 import os
 from typing import Optional
 from app.services.prompt_builder import PromptBuilder
@@ -22,7 +23,7 @@ class AutocompleteService:
         # Use PromptBuilder for consistent prompts
         prompt = PromptBuilder.build_autocomplete_prompt(context, persona)
         
-        config = genai.GenerateContentConfig(
+        config = types.GenerateContentConfig(
             max_output_tokens=max_tokens,
             temperature=0.7,  # Slightly creative but not too random
         )
@@ -41,7 +42,7 @@ class AutocompleteService:
         # Use PromptBuilder for consistent prompts
         prompt = PromptBuilder.build_autocomplete_prompt(context, persona)
         
-        config = genai.GenerateContentConfig(
+        config = types.GenerateContentConfig(
             max_output_tokens=max_tokens,
             temperature=0.7,
         )

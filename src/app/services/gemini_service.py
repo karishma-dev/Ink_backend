@@ -9,7 +9,7 @@ class GeminiService:
         self.client = genai.Client(api_key=api_key)
         self.tools_service = tools_service
 
-    def chat(self, message: str, system_prompt: str = None, tools: list = None) -> str:
+    def chat(self, message: str, system_prompt: str = None, tools: list = None, history: list = None) -> str:
         """Stream chat response with tool call support"""
         
         # Build config with or without tools
@@ -23,9 +23,14 @@ class GeminiService:
                 system_instruction=system_prompt
             )
         
+        if history:
+            contents = history + [{"role": "user", "parts": [{"text": message}]}]
+        else:
+            contents = message
+            
         response = self.client.models.generate_content_stream(
             model="gemini-2.0-flash",
-            contents=message,
+            contents=contents,
             config=config
         )
 
