@@ -9,8 +9,8 @@ class AppException(Exception):
 
 class AuthException(AppException):
     """Authentication/Authorization errors"""
-    def __init__(self, message: str, code: str = "AUTH_ERROR", details: dict = None):
-        super().__init__(message, code, status_code=401, details=details)
+    def __init__(self, message: str, code: str = "AUTH_ERROR", status_code: int = 401, details: dict = None):
+        super().__init__(message, code, status_code=status_code, details=details)
 
 class ValidationException(AppException):
     """Input validation errors"""

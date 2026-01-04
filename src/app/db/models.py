@@ -31,6 +31,7 @@ class User(Base):
     username: Mapped[str] = mapped_column(String, unique=True, nullable=False)
     email: Mapped[str] = mapped_column(String, unique=True, nullable=False)
     password: Mapped[str] = mapped_column(String, nullable=False)
+    active_persona_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     created_at: Mapped[Optional[str]] = mapped_column(DateTime, default=datetime.utcnow)
     chats: Mapped[List[Chat]] = relationship("Chat", backref="user")
 

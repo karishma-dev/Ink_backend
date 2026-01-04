@@ -1,4 +1,5 @@
 import google.genai as genai
+from google.genai import types
 import os
 from app.services.tools_service import ToolsService
 
@@ -10,12 +11,17 @@ class GeminiService:
 
     def chat(self, message: str, system_prompt: str = None, tools: list = None) -> str:
         """Stream chat response with tool call support"""
-        tools = self.get_tools() if self.tools_service else None
-
-        config = {
-            "system_instruction": system_prompt,
-            "tools": tools
-        }
+        
+        # Build config with or without tools
+        if self.tools_service:
+            config = types.GenerateContentConfig(
+                system_instruction=system_prompt,
+                tools=[self._build_recommend_personas_tool()]
+            )
+        else:
+            config = types.GenerateContentConfig(
+                system_instruction=system_prompt
+            )
         
         response = self.client.models.generate_content_stream(
             model="gemini-2.0-flash",
@@ -42,7 +48,7 @@ class GeminiService:
             tool_results = []
 
             for tool_call in tool_calls_found:
-                tool_name = tool_call.function_name
+                tool_name = tool_call.name
                 tool_args = dict(tool_call.args) if tool_call.args else {}
 
                 yield {"type": "tool_call", "name": tool_name, "args": tool_args}
@@ -56,39 +62,44 @@ class GeminiService:
             
             yield {"type": "status", "content": "Processing tool results..."}
 
+            second_config = types.GenerateContentConfig(
+                system_instruction=system_prompt
+            )
+
             second_stream = self.client.models.generate_content_stream(
                 model="gemini-2.0-flash",
                 contents=[
                     message,
                     {"tool_results": tool_results}
                 ],
-                config=config
+                config=second_config
             )
         
             for chunk in second_stream:
                 if chunk.text:
                     yield {"type": "content", "content": chunk.text}
     
-    def get_tools(self):
-        """Return all available tools for Gemini"""
-        return [
-            {
-                "name": "recommend_personas",
-                "description": "Find personas matching a specific topic",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "topic": {
-                            "type": "string",
-                            "description": "Topic to search for (e.g., 'business', 'tech', 'creative')"
+    def _build_recommend_personas_tool(self):
+        """Build the recommend_personas tool using proper SDK types"""
+        return types.Tool(
+            function_declarations=[
+                types.FunctionDeclaration(
+                    name="recommend_personas",
+                    description="Find personas matching a specific topic",
+                    parameters=types.Schema(
+                        type=types.Type.OBJECT,
+                        properties={
+                            "topic": types.Schema(
+                                type=types.Type.STRING,
+                                description="Topic to search for (e.g., 'business', 'tech', 'creative')"
+                            ),
+                            "limit": types.Schema(
+                                type=types.Type.INTEGER,
+                                description="Max personas to return"
+                            )
                         },
-                        "limit": {
-                            "type": "integer",
-                            "description": "Max personas to return",
-                            "default": 5
-                        }
-                    },
-                    "required": ["topic"]
-                }
-            }
-        ]
+                        required=["topic"]
+                    )
+                )
+            ]
+        )

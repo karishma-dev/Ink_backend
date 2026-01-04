@@ -7,6 +7,7 @@ from google.genai.errors import ClientError
 from app.db.database import get_db
 from app.db.repositories.chat_repository import ChatRepository
 from app.db.repositories.persona_repository import PersonaRepository
+from app.db.repositories.user_repository import UserRepository
 from sqlalchemy.orm import Session
 from app.core.security import get_current_user
 from app.core.neo4j_dependency import get_neo4j_db
@@ -30,12 +31,18 @@ async def chat_endpoint(
 ):
     def generate():
         try:
-            # Get persona
+            # Get persona (use explicitly provided or fall back to active persona)
             neo4j_repo = PersonaRepository(neo4j_db)
+            user_repo = UserRepository(db, None)
             persona = None
 
-            if chat_data.persona_id:
-                persona = neo4j_repo.get_persona(chat_data.persona_id)
+            # Priority: 1. Explicit persona_id, 2. User's active persona
+            persona_id_to_use = chat_data.persona_id
+            if not persona_id_to_use:
+                persona_id_to_use = user_repo.get_active_persona_id(user_id)
+            
+            if persona_id_to_use:
+                persona = neo4j_repo.get_persona(persona_id_to_use)
             
             # Initialize shared variables for saving
             full_response = ""

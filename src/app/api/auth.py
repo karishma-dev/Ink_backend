@@ -18,11 +18,21 @@ def register(request: Request, register_data: RegisterRequest, db: Session = Dep
     try:
         user_repo = UserRepository(db, neo4j_db)
 
+        # Check for duplicate email
         existing_user = user_repo.get_user_by_email(register_data.email)
         if existing_user:
             raise AuthException(
                 message="Email already registered",
                 code=AUTH_002,
+                status_code=400
+            )
+        
+        # Check for duplicate username
+        existing_username = user_repo.get_user_by_username(register_data.username)
+        if existing_username:
+            raise AuthException(
+                message="Username already taken",
+                code="USERNAME_EXISTS",
                 status_code=400
             )
         

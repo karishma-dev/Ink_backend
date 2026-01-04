@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from app.api import chat, auth, personas, documents, drafts, autocomplete
+from app.api import chat, auth, personas, documents, drafts, autocomplete, users
 from app.api.collaboration import collab_router
 from dotenv import load_dotenv
 from app.db.database import init_db
@@ -48,6 +48,7 @@ app.include_router(personas.personas_router, prefix="/api", tags=["Personas"])
 app.include_router(documents.documents_router, prefix="/api/documents", tags=["Documents"])
 app.include_router(drafts.drafts_router, prefix="/api/drafts", tags=["Drafts"])
 app.include_router(autocomplete.autocomplete_router, prefix="/api/autocomplete", tags=["Autocomplete"])
+app.include_router(users.users_router, prefix="/api/users", tags=["Users"])
 app.include_router(collab_router, prefix="/api/collab", tags=["Collaboration"])
 
 # Initialize database
