@@ -8,7 +8,7 @@ class PersonaRepository:
         """Create a new persona for a user with all relationships"""
 
         query = """
-        MATCH (u:User {id: $user_id})
+        MERGE (u:User {id: $user_id})
         CREATE (p:Persona {
             id: randomUuid(),
             name: $name,
@@ -30,19 +30,21 @@ class PersonaRepository:
         CREATE (pur:Purpose {type: $purpose})
         CREATE (p)-[:for_purpose]->(pur)
         WITH p, $topics as topics, $banned_words as banned_words
-        UNWIND topics AS topic
-        CREATE (t:Topic {name: topic})
-        CREATE (p)-[:targets_topic]->(t)
+        FOREACH (topic IN topics |
+            MERGE (t:Topic {name: topic})
+            CREATE (p)-[:targets_topic]->(t)
+        )
         WITH p, banned_words
-        UNWIND banned_words AS word
-        CREATE (bw:BannedWord {text: word})
-        CREATE (p)-[:bans_word]->(bw)
+        FOREACH (word IN banned_words |
+            CREATE (bw:BannedWord {text: word})
+            CREATE (p)-[:bans_word]->(bw)
+        )
         WITH p
         OPTIONAL MATCH (p)-[:targets_topic]->(t:Topic)
         OPTIONAL MATCH (p)-[:bans_word]->(bw:BannedWord)
         OPTIONAL MATCH (p)-[:targets_audience]->(a:Audience)
         OPTIONAL MATCH (p)-[:for_purpose]->(pur:Purpose)
-        RETURN p, collect(t.name) as topics, collect(bw.text) as banned_words,
+        RETURN p, collect(DISTINCT t.name) as topics, collect(DISTINCT bw.text) as banned_words,
                a.type as audience, pur.type as purpose
         """
 
@@ -127,14 +129,14 @@ class PersonaRepository:
     def update_persona(self, persona_id: int, persona_data: dict) -> dict:
         """Update persona properties"""
         set_clauses = []
-        params = {"persona_id": persona_id, "updated_at": datetime.utcnow.isoformat()}
+        params = {"persona_id": persona_id}
 
         for key, value in persona_data.items():
             if key not in ["topics", "banned_words", "audience", "purpose", "samples"]:
                 set_clauses.append(f"p.{key} = ${key}")
                 params[key] = value
 
-        set_clauses.append("p.updated_at = $updated_at")
+        set_clauses.append("p.updated_at = datetime()")
         set_clauses_str = ", ".join(set_clauses)
 
         query = f"""

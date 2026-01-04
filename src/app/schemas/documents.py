@@ -27,3 +27,6 @@ class DocumentUploadResponse(BaseModel):
     file_size: int
     status: str
     created_at: Optional[datetime]
+    
+    class Config:
+        from_attributes = True
