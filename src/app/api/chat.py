@@ -1,5 +1,5 @@
 import json
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from app.schemas.chat import ChatRequest, ChatResponse, ChatHistoryResponse, ChatListResponse
 from app.services.gemini_service import GeminiService
 from app.services.prompt_builder import PromptBuilder
@@ -13,40 +13,81 @@ from app.core.neo4j_dependency import get_neo4j_db
 from neo4j import Session as Neo4jSession
 from app.services.tools_service import ToolsService
 from app.services.rag_service import RAGService
+from app.services.edit_service import EditService
 from fastapi.responses import StreamingResponse
+from app.core.rate_limiter import limiter, RATE_LIMITS
 
 chat_router = APIRouter()
 
-@chat_router.post("/chat", response_model=ChatResponse)
+@chat_router.post("/chat")
+@limiter.limit(RATE_LIMITS["chat"])
 async def chat_endpoint(
-    request: ChatRequest, 
+    chat_data: ChatRequest,
+    request: Request,  # Required for rate limiting
     db: Session = Depends(get_db),
     neo4j_db: Neo4jSession = Depends(get_neo4j_db),
     user_id: int = Depends(get_current_user)
 ):
     def generate():
         try:
-            yield f"data: {json.dumps({'type': 'status', 'content': 'Thinking...'})}\n\n"
-
             # Get persona
             neo4j_repo = PersonaRepository(neo4j_db)
             persona = None
 
-            if request.persona_id:
-                persona = neo4j_repo.get_persona(request.persona_id)
+            if chat_data.persona_id:
+                persona = neo4j_repo.get_persona(chat_data.persona_id)
             
-            # Get document context
+            # If draft_content is present, user is in editor - AI decides to edit or answer
+            if chat_data.draft_content:
+                yield f"data: {json.dumps({'type': 'status', 'content': 'Analyzing...'})}\n\n"
+                
+                edit_service = EditService()
+                selection_dict = None
+                if chat_data.selection:
+                    selection_dict = {
+                        "start": chat_data.selection.start,
+                        "end": chat_data.selection.end,
+                        "text": chat_data.selection.text
+                    }
+                
+                result = edit_service.generate_edits(
+                    document_content=chat_data.draft_content,
+                    instruction=chat_data.message,
+                    selection=selection_dict,
+                    persona=persona
+                )
+                
+                response_type = result.get("response_type", "edit")
+                explanation = result.get("explanation", "")
+                
+                # Stream the explanation/answer
+                if explanation:
+                    yield f"data: {json.dumps({'type': 'content', 'content': explanation})}\n\n"
+                
+                # Only send edits if AI decided to make changes
+                if response_type == "edit":
+                    edits = result.get("edits", [])
+                    yield f"data: {json.dumps({'type': 'edits', 'edits': edits})}\n\n"
+                    yield f"data: {json.dumps({'type': 'done', 'has_edits': len(edits) > 0})}\n\n"
+                else:
+                    # Question/advice response - no edits
+                    yield f"data: {json.dumps({'type': 'done', 'has_edits': False})}\n\n"
+                return
+            
+            # Regular chat mode (no document context)
+            yield f"data: {json.dumps({'type': 'status', 'content': 'Thinking...'})}\n\n"
+            
+            # Get RAG document context (also handles @ mentions via document_ids)
             document_context = ""
             citations = []
             
-            if request.document_ids:
+            if chat_data.document_ids:
                 yield f"data: {json.dumps({'type': 'status', 'content': 'Searching documents...'})}\n\n"
 
                 rag_service = RAGService()
-
                 rag_result = rag_service.get_relevant_context(
-                    query=request.message,
-                    document_ids=request.document_ids
+                    query=chat_data.message,
+                    document_ids=chat_data.document_ids
                 )
                 document_context = rag_result["context"]
                 citations = rag_result["citations"]
@@ -63,7 +104,7 @@ async def chat_endpoint(
             gemini_service = GeminiService(tools_service=tools_service)
             full_response = ""
             
-            for event in gemini_service.chat(request.message, system_prompt):
+            for event in gemini_service.chat(chat_data.message, system_prompt):
                 if event["type"] == "content":
                     full_response += event["content"]
                 yield f"data: {json.dumps(event)}\n\n"
@@ -72,14 +113,14 @@ async def chat_endpoint(
             repo = ChatRepository(db)
             chat_id = repo.save_message(
                 user_id=user_id,
-                chat_id=request.chat_id,
-                user_message=request.message,
+                chat_id=chat_data.chat_id,
+                user_message=chat_data.message,
                 ai_response=full_response
             )
             
-            yield f"data: {json.dumps({'type': 'done', 'chat_id': chat_id, 'citations': citations})}\n\n"
+            yield f"data: {json.dumps({'type': 'done', 'chat_id': chat_id, 'citations': citations, 'mode': 'ask'})}\n\n"
 
-        except ClientError as e:
+        except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
 
     return StreamingResponse(generate(), media_type="text/event-stream")

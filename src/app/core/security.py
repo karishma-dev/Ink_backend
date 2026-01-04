@@ -21,3 +21,5 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
         raise HTTPException(status_code=401, detail="Invalid token payload")
     
     return int(user_id)
+
+decode_token = AuthService.decode_access_token

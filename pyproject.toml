@@ -17,5 +17,6 @@ dependencies = [
 	"neo4j>=5.0",
 	"celery",
 	"pypdf",
-	"qdrant-client"
+	"qdrant-client",
+	"slowapi"
 ]

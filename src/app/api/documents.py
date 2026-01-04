@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, status, Query
+from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, status, Query, Request
 from app.db.repositories.document_repository import DocumentRepository
 from sqlalchemy.orm import Session
 from app.db.database import get_db
@@ -6,6 +6,7 @@ from app.core.security import get_current_user
 from app.core.exceptions import ValidationException, NotFound
 from app.schemas.documents import DocumentResponse, DocumentListResponse, DocumentUploadResponse
 from app.workers.document_tasks import process_document
+from app.core.rate_limiter import limiter, RATE_LIMITS
 from pathlib import Path
 import os
 
@@ -20,7 +21,9 @@ UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
 
 @documents_router.post("/upload", response_model=DocumentUploadResponse)
+@limiter.limit(RATE_LIMITS["upload"])
 async def upload(
+    request: Request,  # Required for rate limiting
     db: Session = Depends(get_db),
     file: UploadFile = File(...),
     user_id: int = Depends(get_current_user)

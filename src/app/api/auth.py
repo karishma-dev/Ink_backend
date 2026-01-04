@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from app.db.database import get_db
 from app.db.repositories.user_repository import UserRepository
 from sqlalchemy.orm import Session
@@ -8,15 +8,17 @@ from app.core.neo4j_dependency import get_neo4j_db
 from app.core.exceptions import AuthException, ValidationException
 from app.core.error_codes import AUTH_001, AUTH_002
 from app.core.logger import logger
+from app.core.rate_limiter import limiter, RATE_LIMITS
 
 auth_router = APIRouter()
 
 @auth_router.post("/register", response_model=AuthResponse)
-def register(request: RegisterRequest, db: Session = Depends(get_db), neo4j_db = Depends(get_neo4j_db)):
+@limiter.limit(RATE_LIMITS["auth"])
+def register(request: Request, register_data: RegisterRequest, db: Session = Depends(get_db), neo4j_db = Depends(get_neo4j_db)):
     try:
         user_repo = UserRepository(db, neo4j_db)
 
-        existing_user = user_repo.get_user_by_email(request.email)
+        existing_user = user_repo.get_user_by_email(register_data.email)
         if existing_user:
             raise AuthException(
                 message="Email already registered",
@@ -25,9 +27,9 @@ def register(request: RegisterRequest, db: Session = Depends(get_db), neo4j_db =
             )
         
         new_user = user_repo.create_user(
-            username=request.username,
-            email=request.email,
-            password=request.password
+            username=register_data.username,
+            email=register_data.email,
+            password=register_data.password
         )
         token = AuthService.create_access_token(new_user.id)
         logger.info(f"User registered: {new_user.email}")
@@ -44,12 +46,13 @@ def register(request: RegisterRequest, db: Session = Depends(get_db), neo4j_db =
         )
 
 @auth_router.post("/login", response_model=AuthResponse)
-def login(request: LoginRequest, db: Session = Depends(get_db)):
+@limiter.limit(RATE_LIMITS["auth"])
+def login(request: Request, login_data: LoginRequest, db: Session = Depends(get_db)):
     try:
         user_repo = UserRepository(db, None)
-        user = user_repo.get_user_by_email(request.email)
+        user = user_repo.get_user_by_email(login_data.email)
 
-        if not user or not AuthService.verify_password(request.password, user.password):
+        if not user or not AuthService.verify_password(login_data.password, user.password):
             raise AuthException(
                 message="Invalid credentials",
                 code=AUTH_001,

@@ -42,6 +42,109 @@ class PromptBuilder:
         return "\n".join(prompt_parts)
     
     @staticmethod
+    def build_edit_prompt(document_content: str, instruction: str, selection: dict = None, persona: dict = None) -> str:
+        """Build prompt for document editing mode"""
+        
+        base = PromptBuilder.BASE_SYSTEM_PROMPT
+        
+        edit_instructions = """
+## Editor Context Mode:
+You are helping a user who is writing a document. They may ask questions OR request edits.
+
+**FIRST, determine the user's intent:**
+- If they're asking a QUESTION (advice, feedback, suggestions), respond with normal conversational text.
+- If they're requesting an EDIT (changes to the document), respond with the JSON format below.
+
+**For QUESTIONS/ADVICE** (e.g., "How should I improve this?", "Is this intro good?"):
+Just respond naturally with helpful text. No JSON needed.
+
+**For EDIT REQUESTS** (e.g., "Make this shorter", "Fix the grammar", "Add a conclusion"):
+Return a JSON object:
+{
+  "type": "edit",
+  "explanation": "I made paragraph 2 more concise by removing redundant phrases.",
+  "edits": [
+    {
+      "type": "replace",
+      "start": <start character position>,
+      "end": <end character position>,
+      "original": "<exact text being replaced>",
+      "replacement": "<new text>"
+    }
+  ]
+}
+
+IMPORTANT:
+- For questions: Just respond with text, no JSON
+- For edits: Respond with ONLY the JSON object, no markdown code blocks
+- If user requests an edit but no changes are needed: {"type": "edit", "explanation": "The document looks good as is!", "edits": []}
+"""
+        
+        selection_context = ""
+        if selection:
+            selection_context = f"""
+## User's Selection (characters {selection.get('start', 0)} to {selection.get('end', 0)}):
+---
+{selection.get('text', '')}
+---
+Focus your edits on this selection.
+"""
+        
+        persona_context = ""
+        if persona:
+            persona_context = f"""
+## Writing Style:
+- Formality: {persona.get('formality_level', 5)}/10
+- Persona: {persona.get('name', 'Default')}
+"""
+        
+        return f"""{base}
+{edit_instructions}
+{selection_context}
+{persona_context}
+## Document Content:
+---
+{document_content}
+---
+
+## User Instruction: {instruction}
+"""
+
+    @staticmethod
+    def build_autocomplete_prompt(context: str, persona: dict = None) -> str:
+        """Build prompt for autocomplete/Smart Compose"""
+        
+        base = PromptBuilder.BASE_SYSTEM_PROMPT
+        
+        autocomplete_instructions = """
+## Autocomplete Mode:
+Complete the user's text naturally with approximately 1 sentence (10-30 words).
+
+Rules:
+- Continue the text seamlessly and naturally
+- Do NOT repeat any text that's already written
+- Match the tone and style of the existing text
+- Keep it concise and relevant
+- Return ONLY the completion, nothing else (no quotes, no explanations)
+"""
+        
+        persona_context = ""
+        if persona:
+            persona_context = f"""
+## Writing Style to Match:
+- Formality: {persona.get('formality_level', 5)}/10
+- Creativity: {persona.get('creativity_level', 5)}/10
+- Sentence style: {persona.get('sentence_length', 'medium')}
+- Persona: {persona.get('name', 'Default')}
+"""
+        
+        return f"""{base}
+{autocomplete_instructions}
+{persona_context}
+## Continue this text:
+{context}"""
+    
+    @staticmethod
     def build_persona_prompt(persona:dict) -> str:
         """
         Takes persona data and returns a system prompt string for Gemini
@@ -52,14 +155,6 @@ class PromptBuilder:
         Returns:
             str: A system prompt that instructs Gemini to write in this persona's voice
         """
-
-        # Build the prompt using persona fileds
-        # Think about what instructions to give Gemini:
-        # - Show examples from samples
-        # - Ban certain words
-        # - Set tone/formality level
-        # - Include topics focus
-        # - Set purpose
 
         prompt = f"""You are writing as the persona: {persona['name']}
         Description: {persona['description']}
